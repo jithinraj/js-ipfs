@@ -10,7 +10,6 @@ const parallel = require('async/parallel')
 const series = require('async/series')
 const waterfall = require('async/waterfall')
 const API = require('ipfs-api')
-const bl = require('bl')
 const PeerInfo = require('peer-info')
 const PeerId = require('peer-id')
 const multiaddr = require('multiaddr')
@@ -34,7 +33,7 @@ describe.skip('circuit', function () {
   let factory
 
   let jsRelay = new API(`/ip4/127.0.0.1/tcp/31015`)
-  // let goRelay = new API(`/ip4/127.0.0.1/tcp/33031`)
+  let goRelay = new API(`/ip4/127.0.0.1/tcp/33027`)
   let node1
   let node2
 
@@ -51,8 +50,8 @@ describe.skip('circuit', function () {
 
     const base = {
       EXPERIMENTAL: {
-        Relay: {
-          Enabled: true
+        relay: {
+          enabled: true
         }
       },
       Addresses: {
@@ -63,12 +62,12 @@ describe.skip('circuit', function () {
     parallel([
       (cb) => factory.spawnNode(null, Object.assign(base, {
         Addresses: {
-          Swarm: [ (isNode ? `/ip4/127.0.0.1/tcp/0` : '') ]
+          Swarm: [(isNode ? `/ip4/127.0.0.1/tcp/0` : '')]
         }
       }), cb),
       (cb) => factory.spawnNode(null, Object.assign(base, {
         Addresses: {
-          Swarm: [ (isNode ? `/ip4/127.0.0.1/tcp/0/ws` : '') ]
+          Swarm: [(isNode ? `/ip4/127.0.0.1/tcp/0/ws` : '')]
         }
       }), cb)
     ], (err, nodes) => {
@@ -78,20 +77,20 @@ describe.skip('circuit', function () {
 
       parallel([
         (cb) => jsRelay.id(cb),
-        // (cb) => goRelay.id(cb),
+        (cb) => goRelay.id(cb),
         (cb) => node1.id(cb),
         (cb) => node2.id(cb)
       ], (err, res2) => {
         expect(err).to.not.exist()
         parallel([
           (cb) => peerInfoFromObj(res2[0], cb),
-          // (cb) => peerInfoFromObj(res2[1], cb),
+          (cb) => peerInfoFromObj(res2[1], cb),
           (cb) => peerInfoFromObj(res2[1], cb),
           (cb) => peerInfoFromObj(res2[2], cb)
         ], (err, res3) => {
           expect(err).to.not.exist()
           jsRelayId = res3[0]
-          // goRelayId = res3[1]
+          goRelayId = res3[1]
           // nodeId1 = res3[2]
           nodeId2 = res3[2]
           done()
@@ -102,9 +101,7 @@ describe.skip('circuit', function () {
 
   after((done) => factory.dismantle(done))
 
-  // TODO: 1) figure out why this test hangs randomly
-  // TODO: 2) move this test to the interop batch
-  it.skip('node1 <-> goRelay <-> node2', (done) => {
+  it('node1 <-> goRelay <-> node2', (done) => {
     const data = crypto.randomBytes(128)
 
     series([
@@ -115,15 +112,19 @@ describe.skip('circuit', function () {
       (cb) => node1.swarm.connect(nodeId2, cb)
     ], (err) => {
       expect(err).to.not.exist()
+
       waterfall([
         (cb) => node1.files.add(data, cb),
         (filesAdded, cb) => node2.files.cat(filesAdded[0].hash, cb),
-        (stream, cb) => stream.pipe(bl(cb))
+        (buffer, cb) => {
+          expect(buffer).to.deep.equal(data)
+          cb()
+        }
       ], done)
     })
   })
 
-  it('node1 <-> jsRelay <-> node2', (done) => {
+  it.skip('node1 <-> jsRelay <-> node2', (done) => {
     const data = crypto.randomBytes(128)
 
     series([
@@ -138,7 +139,10 @@ describe.skip('circuit', function () {
       waterfall([
         (cb) => node1.files.add(data, cb),
         (filesAdded, cb) => node2.files.cat(filesAdded[0].hash, cb),
-        (stream, cb) => stream.pipe(bl(cb))
+        (buffer, cb) => {
+          expect(buffer).to.deep.equal(data)
+          cb()
+        }
       ], done)
     })
   })

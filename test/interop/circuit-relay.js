@@ -8,7 +8,6 @@ const expect = chai.expect
 chai.use(dirtyChai)
 const parallel = require('async/parallel')
 const series = require('async/series')
-const bl = require('bl')
 const waterfall = require('async/waterfall')
 const multiaddr = require('multiaddr')
 const crypto = require('crypto')
@@ -18,7 +17,7 @@ const js = ads.spawnJsNode
 const go = ads.spawnGoNode
 const stop = ads.stopNodes
 
-describe.skip('circuit interop', () => {
+describe('circuit interop', () => {
   let jsTCP
   let jsTCPAddrs
   let jsWS
@@ -33,7 +32,8 @@ describe.skip('circuit interop', () => {
   let goWSAddrs
   let goWS
 
-  beforeEach((done) => {
+  beforeEach(function (done) {
+    this.timeout(20 * 1000)
     const base = '/ip4/127.0.0.1/tcp'
 
     parallel([
@@ -61,7 +61,7 @@ describe.skip('circuit interop', () => {
     })
   })
 
-  afterEach(() => stop())
+  afterEach((done) => stop(done))
 
   it('jsWS <-> jsRelay <-> jsTCP', (done) => {
     const data = crypto.randomBytes(128)
@@ -75,7 +75,10 @@ describe.skip('circuit interop', () => {
       waterfall([
         (cb) => jsTCP.files.add(data, cb),
         (res, cb) => jsWS.files.cat(res[0].hash, cb),
-        (stream, cb) => stream.pipe(bl(cb))
+        (buffer, cb) => {
+          expect(buffer).to.deep.equal(data)
+          cb()
+        }
       ], done)
     })
   })
@@ -92,7 +95,10 @@ describe.skip('circuit interop', () => {
       waterfall([
         (cb) => goTCP.files.add(data, cb),
         (res, cb) => goWS.files.cat(res[0].hash, cb),
-        (stream, cb) => stream.pipe(bl(cb))
+        (buffer, cb) => {
+          expect(buffer).to.deep.equal(data)
+          cb()
+        }
       ], done)
     })
   })
@@ -109,7 +115,10 @@ describe.skip('circuit interop', () => {
       waterfall([
         (cb) => goTCP.files.add(data, cb),
         (res, cb) => jsWS.files.cat(res[0].hash, cb),
-        (stream, cb) => stream.pipe(bl(cb))
+        (buffer, cb) => {
+          expect(buffer).to.deep.equal(data)
+          cb()
+        }
       ], done)
     })
   })
@@ -117,8 +126,9 @@ describe.skip('circuit interop', () => {
   it('jsTCP <-> goRelay <-> jsWS', (done) => {
     const data = crypto.randomBytes(128)
     series([
-      (cb) => jsTCP.swarm.connect(goRelayAddrs[2], cb),
+      (cb) => jsTCP.swarm.connect(goRelayAddrs[1], cb),
       (cb) => jsWS.swarm.connect(goRelayAddrs[0], cb),
+      (cb) => jsTCP.swarm.connect(goRelayAddrs[1], cb),
       (cb) => setTimeout(cb, 1000),
       (cb) => jsWS.swarm.connect(jsTCPAddrs[0], cb)
     ], (err) => {
@@ -126,7 +136,10 @@ describe.skip('circuit interop', () => {
       waterfall([
         (cb) => jsTCP.files.add(data, cb),
         (res, cb) => jsWS.files.cat(res[0].hash, cb),
-        (stream, cb) => stream.pipe(bl(cb))
+        (buffer, cb) => {
+          expect(buffer).to.deep.equal(data)
+          cb()
+        }
       ], done)
     })
   })
@@ -135,7 +148,7 @@ describe.skip('circuit interop', () => {
     const data = crypto.randomBytes(128)
     series([
       (cb) => goWS.swarm.connect(goRelayAddrs[0], cb),
-      (cb) => goTCP.swarm.connect(goRelayAddrs[2], cb),
+      (cb) => goTCP.swarm.connect(goRelayAddrs[1], cb),
       (cb) => setTimeout(cb, 1000),
       (cb) => goWS.swarm.connect(`/p2p-circuit/ipfs/${multiaddr(goTCPAddrs[0]).getPeerId()}`, cb)
     ], (err) => {
@@ -143,7 +156,10 @@ describe.skip('circuit interop', () => {
       waterfall([
         (cb) => goTCP.files.add(data, cb),
         (res, cb) => goWS.files.cat(res[0].hash, cb),
-        (stream, cb) => stream.pipe(bl(cb))
+        (buffer, cb) => {
+          expect(buffer).to.deep.equal(data)
+          cb()
+        }
       ], done)
     })
   })
@@ -152,7 +168,7 @@ describe.skip('circuit interop', () => {
     const data = crypto.randomBytes(128)
     series([
       (cb) => jsWS.swarm.connect(goRelayAddrs[0], cb),
-      (cb) => goTCP.swarm.connect(goRelayAddrs[2], cb),
+      (cb) => goTCP.swarm.connect(goRelayAddrs[1], cb),
       (cb) => setTimeout(cb, 1000),
       (cb) => goTCP.swarm.connect(`/p2p-circuit/ipfs/${multiaddr(jsWSAddrs[0]).getPeerId()}`, cb)
     ], (err) => {
@@ -160,7 +176,10 @@ describe.skip('circuit interop', () => {
       waterfall([
         (cb) => goTCP.files.add(data, cb),
         (res, cb) => jsWS.files.cat(res[0].hash, cb),
-        (stream, cb) => stream.pipe(bl(cb))
+        (buffer, cb) => {
+          expect(buffer).to.deep.equal(data)
+          cb()
+        }
       ], done)
     })
   })

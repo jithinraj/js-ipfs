@@ -45,6 +45,16 @@ exports.spawnGoNode = (addrs, hop, api, gateway, callback) => {
         DisableNatPortMap: false,
         DisableRelay: false,
         EnableRelayHop: hop
+      },
+      API: {
+        HTTPHeaders: {
+          'Access-Control-Allow-Origin': ['*'],
+          'Access-Control-Allow-Methods': [
+            'PUT',
+            'POST',
+            'GET'
+          ]
+        }
       }
     }
   })
@@ -92,10 +102,23 @@ exports.spawnJsNode = (addrs, hop, api, gateway, callback) => {
         API: `/ip4/0.0.0.0/tcp/${api}`,
         Gateway: `/ip4/0.0.0.0/tcp/${gateway}`
       },
+      API: {
+        HTTPHeaders: {
+          'Access-Control-Allow-Origin': ['*'],
+          'Access-Control-Allow-Methods': [
+            'PUT',
+            'POST',
+            'GET'
+          ]
+        }
+      },
       EXPERIMENTAL: {
-        Swarm: {
-          DisableRelay: false,
-          EnableRelayHop: hop
+        relay: {
+          enabled: true,
+          hop: {
+            enabled: hop,
+            active: false
+          }
         }
       }
     }), cb),

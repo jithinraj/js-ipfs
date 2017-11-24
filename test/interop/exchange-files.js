@@ -179,7 +179,9 @@ describe('exchange files', () => {
       })
     })
 
-    it(`js -> go: depth: 5, num: ${num}`, () => {
+    it(`js -> go: depth: 5, num: ${num}`, function () {
+      this.timeout(6000)
+
       const dir = tmpDir()
       return randomFs({
         path: dir,
@@ -196,7 +198,9 @@ describe('exchange files', () => {
       })
     })
 
-    it(`js -> js: depth: 5, num: ${num}`, () => {
+    it(`js -> js: depth: 5, num: ${num}`, function () {
+      this.timeout(6000)
+
       const dir = tmpDir()
       return randomFs({
         path: dir,
