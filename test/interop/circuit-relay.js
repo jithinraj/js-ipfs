@@ -6,18 +6,24 @@ const chai = require('chai')
 const dirtyChai = require('dirty-chai')
 const expect = chai.expect
 chai.use(dirtyChai)
+
 const parallel = require('async/parallel')
 const series = require('async/series')
 const waterfall = require('async/waterfall')
 const multiaddr = require('multiaddr')
 const crypto = require('crypto')
+const ipfsdFactory = require('ipfsd-ctl')
 
-const ads = require('../utils/another-daemon-spawner')
-const js = ads.spawnJsNode
-const go = ads.spawnGoNode
-const stop = ads.stopNodes
+const isNode = require('detect-node')
 
-describe('circuit interop', () => {
+let ipfsdController
+if (isNode) {
+  ipfsdController = ipfsdFactory.localController
+} else {
+  ipfsdController = ipfsdFactory.remoteController()
+}
+
+describe.only('circuit interop', () => {
   let jsTCP
   let jsTCPAddrs
   let jsWS
@@ -25,51 +31,155 @@ describe('circuit interop', () => {
   let jsRelayAddrs
 
   let goRelayAddrs
-
   let goTCPAddrs
   let goTCP
-
-  let goWSAddrs
+  // let goWSAddrs
   let goWS
 
+  let ctrlNodes
+  let apiNodes
+
   beforeEach(function (done) {
-    this.timeout(20 * 1000)
+    this.timeout(50 * 1000)
     const base = '/ip4/127.0.0.1/tcp'
 
     parallel([
-      (cb) => js([`${base}/61454/ws`, `${base}/61453`], true, cb),
-      (cb) => js([`${base}/9002`], cb),
-      (cb) => js([`${base}/9003/ws`], cb),
-      (cb) => go([`${base}/0/ws`, `${base}/0`], true, cb),
-      (cb) => go([`${base}/0`], cb),
-      (cb) => go([`${base}/0/ws`], cb)
+      (cb) => ipfsdController.spawn({
+        isJs: true,
+        config: {
+          'Addresses.Swarm': [`${base}/35002`, `${base}/35001/ws`],
+          'Addresses.API': `${base}/0`,
+          'Addresses.Gateway': `${base}/0`,
+          'Bootstrap': [],
+          'Discovery.MDNS.Enabled': false,
+          'EXPERIMENTAL.relay.enabled': true,
+          'EXPERIMENTAL.relay.hop.enabled': true
+        }
+      }, cb),
+      (cb) => ipfsdController.spawn({
+        isJs: true,
+        config: {
+          'Addresses.Swarm': [`${base}/35003`],
+          'Addresses.API': `${base}/0`,
+          'Addresses.Gateway': `${base}/0`,
+          'Bootstrap': [],
+          'Discovery.MDNS.Enabled': false,
+          'EXPERIMENTAL.relay.enabled': true,
+          'EXPERIMENTAL.relay.hop.enabled': false
+        }
+      }, cb),
+      (cb) => ipfsdController.spawn({
+        isJs: true,
+        config: {
+          'Addresses.Swarm': [`${base}/35004/ws`],
+          'Addresses.API': `${base}/0`,
+          'Addresses.Gateway': `${base}/0`,
+          'Bootstrap': [],
+          'Discovery.MDNS.Enabled': false,
+          'EXPERIMENTAL.relay.enabled': true,
+          'EXPERIMENTAL.relay.hop.enabled': false
+        }
+      }, cb),
+      (cb) => ipfsdController.spawn({
+        config: {
+          'Addresses.Swarm': [`${base}/35005/ws`, `${base}/35006`],
+          'Addresses.API': `${base}/0`,
+          'Addresses.Gateway': `${base}/0`,
+          'Bootstrap': [],
+          'Discovery.MDNS.Enabled': false,
+          'Swarm.DisableRelay': false,
+          'Swarm.EnableRelayHop': true
+        }
+      }, cb),
+      (cb) => ipfsdController.spawn({
+        config: {
+          'Addresses.Swarm': [`${base}/35007`],
+          'Addresses.API': `${base}/0`,
+          'Addresses.Gateway': `${base}/0`,
+          'Bootstrap': [],
+          'Discovery.MDNS.Enabled': false,
+          'Swarm.DisableRelay': false,
+          'Swarm.EnableRelayHop': false
+        }
+      }, cb),
+      (cb) => ipfsdController.spawn({
+        config: {
+          'Addresses.Swarm': [`${base}/35008/ws`],
+          'Addresses.API': `${base}/0`,
+          'Addresses.Gateway': `${base}/0`,
+          'Bootstrap': [],
+          'Discovery.MDNS.Enabled': false,
+          'Swarm.DisableRelay': false,
+          'Swarm.EnableRelayHop': false
+        }
+      }, cb)
     ], (err, nodes) => {
       expect(err).to.not.exist()
 
-      jsRelayAddrs = nodes[0][1].map((a) => a.toString()).filter((a) => !a.includes('/p2p-circuit'))
-      jsTCP = nodes[1][0]
-      jsTCPAddrs = nodes[1][1].map((a) => a.toString()).filter((a) => a.includes('/p2p-circuit'))
-      jsWS = nodes[2][0]
-      jsWSAddrs = nodes[2][1].map((a) => a.toString()).filter((a) => a.includes('/p2p-circuit'))
+      ctrlNodes = nodes.map((node) => node.ctrl)
+      apiNodes = nodes.map((node) => node.ctl)
 
-      goRelayAddrs = nodes[3][1]
-      goTCP = nodes[4][0].api
-      goTCPAddrs = nodes[4][1]
-      goWS = nodes[5][0].api
-      goWSAddrs = nodes[5][1]
-      done()
+      parallel([
+        (cb) => apiNodes[0].swarm.localAddrs((err, addrs) => {
+          expect(err).to.not.exist()
+          jsRelayAddrs = addrs.map((a) => a.toString()).filter((a) => !a.includes('/p2p-circuit'))
+          cb()
+        }),
+        (cb) => {
+          jsTCP = apiNodes[1]
+          cb()
+        },
+        (cb) => apiNodes[1].swarm.localAddrs((err, addrs) => {
+          expect(err).to.not.exist()
+          jsTCPAddrs = addrs.map((a) => a.toString()).filter((a) => !a.includes('/p2p-circuit'))
+          cb()
+        }),
+        (cb) => {
+          jsWS = apiNodes[2]
+          cb()
+        },
+        (cb) => apiNodes[2].swarm.localAddrs((err, addrs) => {
+          expect(err).to.not.exist()
+          jsWSAddrs = addrs.map((a) => a.toString()).filter((a) => !a.includes('/p2p-circuit'))
+          cb()
+        }),
+        (cb) => apiNodes[3].id((err, id) => {
+          expect(err).to.not.exist()
+          goRelayAddrs = id.addresses
+          cb()
+        }),
+        (cb) => {
+          goTCP = apiNodes[4]
+          cb()
+        },
+        (cb) => apiNodes[4].id((err, id) => {
+          expect(err).to.not.exist()
+          goTCPAddrs = id.addresses
+          cb()
+        }),
+        (cb) => {
+          goWS = apiNodes[5]
+          cb()
+        },
+        // (cb) => apiNodes[5].id((err, id) => {
+        //   expect(err).to.not.exist()
+        //   goWSAddrs = id.addresses
+        //   cb()
+        // })
+      ], done)
     })
   })
 
-  afterEach((done) => stop(done))
+  afterEach((done) => parallel(ctrlNodes.map((node) => (cb) => node.stopDaemon(cb)), done))
 
-  it('jsWS <-> jsRelay <-> jsTCP', (done) => {
+  it('jsWS <-> jsRelay <-> jsTCP', function (done) {
+    this.timeout(20 * 1000)
     const data = crypto.randomBytes(128)
     series([
-      (cb) => jsWS.swarm.connect(jsRelayAddrs[0], cb),
-      (cb) => jsTCP.swarm.connect(jsRelayAddrs[1], cb),
+      (cb) => jsWS.swarm.connect(jsRelayAddrs.filter(a => a.toString().includes('/ws'))[0], cb),
+      (cb) => jsTCP.swarm.connect(jsRelayAddrs.filter(a => !a.toString().includes('/ws'))[0], cb),
       (cb) => setTimeout(cb, 1000),
-      (cb) => jsTCP.swarm.connect(jsWSAddrs[0], cb)
+      (cb) => jsWS.swarm.connect(jsTCPAddrs[0], cb)
     ], (err) => {
       expect(err).to.not.exist()
       waterfall([
@@ -86,10 +196,10 @@ describe('circuit interop', () => {
   it('goWS <-> jsRelay <-> goTCP', (done) => {
     const data = crypto.randomBytes(128)
     series([
-      (cb) => goWS.swarm.connect(jsRelayAddrs[0], cb),
-      (cb) => goTCP.swarm.connect(jsRelayAddrs[1], cb),
+      (cb) => goWS.swarm.connect(jsRelayAddrs.filter(a => a.toString().includes('/ws'))[0], cb),
+      (cb) => goTCP.swarm.connect(jsRelayAddrs.filter(a => !a.toString().includes('/ws'))[0], cb),
       (cb) => setTimeout(cb, 1000),
-      (cb) => goTCP.swarm.connect(`/p2p-circuit/ipfs/${multiaddr(goWSAddrs[0]).getPeerId()}`, cb)
+      (cb) => goWS.swarm.connect(goTCPAddrs[0], cb)
     ], (err) => {
       expect(err).to.not.exist()
       waterfall([
@@ -106,10 +216,10 @@ describe('circuit interop', () => {
   it('jsWS <-> jsRelay <-> goTCP', (done) => {
     const data = crypto.randomBytes(128)
     series([
-      (cb) => jsWS.swarm.connect(jsRelayAddrs[0], cb),
-      (cb) => goTCP.swarm.connect(jsRelayAddrs[1], cb),
+      (cb) => jsWS.swarm.connect(jsRelayAddrs.filter(a => a.toString().includes('/ws'))[0], cb),
+      (cb) => goTCP.swarm.connect(jsRelayAddrs.filter(a => !a.toString().includes('/ws'))[0], cb),
       (cb) => setTimeout(cb, 1000),
-      (cb) => goTCP.swarm.connect(jsWSAddrs[0], cb)
+      (cb) => jsWS.swarm.connect(goTCPAddrs[0], cb)
     ], (err) => {
       expect(err).to.not.exist()
       waterfall([
@@ -126,9 +236,8 @@ describe('circuit interop', () => {
   it('jsTCP <-> goRelay <-> jsWS', (done) => {
     const data = crypto.randomBytes(128)
     series([
-      (cb) => jsTCP.swarm.connect(goRelayAddrs[1], cb),
-      (cb) => jsWS.swarm.connect(goRelayAddrs[0], cb),
-      (cb) => jsTCP.swarm.connect(goRelayAddrs[1], cb),
+      (cb) => jsTCP.swarm.connect(goRelayAddrs.filter(a => !a.toString().includes('/ws'))[0], cb),
+      (cb) => jsWS.swarm.connect(goRelayAddrs.filter(a => a.toString().includes('/ws'))[0], cb),
       (cb) => setTimeout(cb, 1000),
       (cb) => jsWS.swarm.connect(jsTCPAddrs[0], cb)
     ], (err) => {
@@ -147,10 +256,10 @@ describe('circuit interop', () => {
   it('goTCP <-> goRelay <-> goWS', (done) => {
     const data = crypto.randomBytes(128)
     series([
-      (cb) => goWS.swarm.connect(goRelayAddrs[0], cb),
-      (cb) => goTCP.swarm.connect(goRelayAddrs[1], cb),
+      (cb) => goWS.swarm.connect(goRelayAddrs.filter(a => a.toString().includes('/ws'))[0], cb),
+      (cb) => goTCP.swarm.connect(goRelayAddrs.filter(a => !a.toString().includes('/ws'))[0], cb),
       (cb) => setTimeout(cb, 1000),
-      (cb) => goWS.swarm.connect(`/p2p-circuit/ipfs/${multiaddr(goTCPAddrs[0]).getPeerId()}`, cb)
+      (cb) => goWS.swarm.connect(goTCPAddrs[0], cb)
     ], (err) => {
       expect(err).to.not.exist()
       waterfall([
@@ -167,15 +276,16 @@ describe('circuit interop', () => {
   it('jsWS <-> goRelay <-> goTCP', (done) => {
     const data = crypto.randomBytes(128)
     series([
-      (cb) => jsWS.swarm.connect(goRelayAddrs[0], cb),
-      (cb) => goTCP.swarm.connect(goRelayAddrs[1], cb),
+      (cb) => jsWS.swarm.connect(goRelayAddrs.filter(a => a.toString().includes('/ws'))[0], cb),
+      (cb) => goTCP.swarm.connect(goRelayAddrs.filter(a => !a.toString().includes('/ws'))[0], cb),
       (cb) => setTimeout(cb, 1000),
-      (cb) => goTCP.swarm.connect(`/p2p-circuit/ipfs/${multiaddr(jsWSAddrs[0]).getPeerId()}`, cb)
+      // TODO: go doesn't seem to be able to fallback to circuit, it needs an explicit addr
+      (cb) => jsWS.swarm.connect(`/p2p-circuit/ipfs/${multiaddr(goTCPAddrs[0]).getPeerId()}`, cb)
     ], (err) => {
       expect(err).to.not.exist()
       waterfall([
-        (cb) => goTCP.files.add(data, cb),
-        (res, cb) => jsWS.files.cat(res[0].hash, cb),
+        (cb) => jsWS.files.add(data, cb),
+        (res, cb) => goTCP.files.cat(res[0].hash, cb),
         (buffer, cb) => {
           expect(buffer).to.deep.equal(data)
           cb()

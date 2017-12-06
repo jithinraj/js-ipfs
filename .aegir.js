@@ -1,5 +1,7 @@
 'use strict'
 
+const ipfsdFactory = require('ipfsd-ctl')
+
 const parallel = require('async/parallel')
 const ads = require('./test/utils/another-daemon-spawner')
 const js = ads.spawnJsNode
@@ -18,8 +20,7 @@ function start (done) {
       (cb) => js([`${base}/10012`, `${base}/20012/ws`], true, 31012, 32012, cb),
       (cb) => js([`${base}/10013`, `${base}/20013/ws`], true, 31013, 32013, cb),
       (cb) => js([`${base}/10014`, `${base}/20014/ws`], true, 31014, 32014, cb),
-      (cb) => js([`${base}/10015`, `${base}/20015/ws`], true, 31015, 32015, cb),
-      (cb) => go([`${base}/10027`, `${base}/20027/ws`], true, 33027, 44027, cb), // we need this for circuit for now
+      (cb) => js([`${base}/10015`, `${base}/20015/ws`], true, 31015, 32015, cb)
     ], done)
   } else if (process.env.IPFS_TEST === 'interop') {
     parallel([
@@ -39,12 +40,19 @@ module.exports = {
       pattern: 'node_modules/interface-ipfs-core/test/fixtures/**/*',
       watched: false,
       served: true,
-      included: false
-    }],
-    singleRun: true
+      included: false,
+      singleRun: false
+    }]
   },
   hooks: {
-    pre: start,
-    post: stop
+    node: {
+      pre: start,
+      post: stop,
+    },
+    browser: {
+      pre: ipfsdFactory.server.start,
+      post: ipfsdFactory.server.stop
+    }
   }
 }
+
