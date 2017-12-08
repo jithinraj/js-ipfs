@@ -23,7 +23,7 @@ if (isNode) {
   ipfsdController = ipfsdFactory.remoteController()
 }
 
-describe.only('circuit interop', () => {
+describe('circuit interop', () => {
   let jsTCP
   let jsTCPAddrs
   let jsWS
@@ -33,7 +33,7 @@ describe.only('circuit interop', () => {
   let goRelayAddrs
   let goTCPAddrs
   let goTCP
-  // let goWSAddrs
+  let goWSAddrs
   let goWS
 
   let ctrlNodes
@@ -48,8 +48,6 @@ describe.only('circuit interop', () => {
         isJs: true,
         config: {
           'Addresses.Swarm': [`${base}/35002`, `${base}/35001/ws`],
-          'Addresses.API': `${base}/0`,
-          'Addresses.Gateway': `${base}/0`,
           'Bootstrap': [],
           'Discovery.MDNS.Enabled': false,
           'EXPERIMENTAL.relay.enabled': true,
@@ -60,8 +58,6 @@ describe.only('circuit interop', () => {
         isJs: true,
         config: {
           'Addresses.Swarm': [`${base}/35003`],
-          'Addresses.API': `${base}/0`,
-          'Addresses.Gateway': `${base}/0`,
           'Bootstrap': [],
           'Discovery.MDNS.Enabled': false,
           'EXPERIMENTAL.relay.enabled': true,
@@ -72,8 +68,6 @@ describe.only('circuit interop', () => {
         isJs: true,
         config: {
           'Addresses.Swarm': [`${base}/35004/ws`],
-          'Addresses.API': `${base}/0`,
-          'Addresses.Gateway': `${base}/0`,
           'Bootstrap': [],
           'Discovery.MDNS.Enabled': false,
           'EXPERIMENTAL.relay.enabled': true,
@@ -83,8 +77,6 @@ describe.only('circuit interop', () => {
       (cb) => ipfsdController.spawn({
         config: {
           'Addresses.Swarm': [`${base}/35005/ws`, `${base}/35006`],
-          'Addresses.API': `${base}/0`,
-          'Addresses.Gateway': `${base}/0`,
           'Bootstrap': [],
           'Discovery.MDNS.Enabled': false,
           'Swarm.DisableRelay': false,
@@ -94,8 +86,6 @@ describe.only('circuit interop', () => {
       (cb) => ipfsdController.spawn({
         config: {
           'Addresses.Swarm': [`${base}/35007`],
-          'Addresses.API': `${base}/0`,
-          'Addresses.Gateway': `${base}/0`,
           'Bootstrap': [],
           'Discovery.MDNS.Enabled': false,
           'Swarm.DisableRelay': false,
@@ -105,8 +95,6 @@ describe.only('circuit interop', () => {
       (cb) => ipfsdController.spawn({
         config: {
           'Addresses.Swarm': [`${base}/35008/ws`],
-          'Addresses.API': `${base}/0`,
-          'Addresses.Gateway': `${base}/0`,
           'Bootstrap': [],
           'Discovery.MDNS.Enabled': false,
           'Swarm.DisableRelay': false,
@@ -161,11 +149,11 @@ describe.only('circuit interop', () => {
           goWS = apiNodes[5]
           cb()
         },
-        // (cb) => apiNodes[5].id((err, id) => {
-        //   expect(err).to.not.exist()
-        //   goWSAddrs = id.addresses
-        //   cb()
-        // })
+        (cb) => apiNodes[5].id((err, id) => {
+          expect(err).to.not.exist()
+          goWSAddrs = id.addresses
+          cb()
+        })
       ], done)
     })
   })

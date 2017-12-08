@@ -8,8 +8,16 @@ chai.use(dirtyChai)
 const series = require('async/series')
 const parallel = require('async/parallel')
 
-const GoDaemon = require('../utils/interop-daemon-spawner/go')
-const JSDaemon = require('../utils/interop-daemon-spawner/js')
+const ipfsdFactory = require('ipfsd-ctl')
+
+const isNode = require('detect-node')
+
+let ipfsdController
+if (isNode) {
+  ipfsdController = ipfsdFactory.localController
+} else {
+  ipfsdController = ipfsdFactory.remoteController()
+}
 
 /*
  * Wait for a condition to become true.  When its true, callback is called.
@@ -36,35 +44,31 @@ describe('pubsub', function () {
   let jsId
   let goId
 
+  let nodes = []
   before(function (done) {
     this.timeout(50 * 1000)
 
-    goD = new GoDaemon({
-      disposable: true,
-      init: true,
-      flags: ['--enable-pubsub-experiment']
-    })
-    jsD = new JSDaemon()
-
     parallel([
-      (cb) => goD.start(cb),
-      (cb) => jsD.start(cb)
-    ], (done))
+      (cb) => ipfsdController.spawn({ args: ['--enable-pubsub-experiment'] }, cb),
+      (cb) => ipfsdController.spawn({ isJs: true, args: ['--enable-pubsub-experiment'] }, cb)
+    ], (err, n) => {
+      expect(err).to.not.exist()
+      nodes = n
+      goD = nodes[0].ctl
+      jsD = nodes[1].ctl
+      done()
+    })
   })
 
   after(function (done) {
     this.timeout(50 * 1000)
-
-    parallel([
-      (cb) => goD.stop(cb),
-      (cb) => jsD.stop(cb)
-    ], done)
+    parallel(nodes.map((node) => (cb) => node.ctrl.stopDaemon(cb)), done)
   })
 
   it('make connections', (done) => {
     series([
-      (cb) => jsD.api.id(cb),
-      (cb) => goD.api.id(cb)
+      (cb) => jsD.id(cb),
+      (cb) => goD.id(cb)
     ], (err, ids) => {
       expect(err).to.not.exist()
 
@@ -75,8 +79,8 @@ describe('pubsub', function () {
       const goLocalAddr = ids[1].addresses.find(a => a.includes('127.0.0.1'))
 
       parallel([
-        (cb) => jsD.api.swarm.connect(goLocalAddr, cb),
-        (cb) => goD.api.swarm.connect(jsLocalAddr, cb),
+        (cb) => jsD.swarm.connect(goLocalAddr, cb),
+        (cb) => goD.swarm.connect(jsLocalAddr, cb),
         (cb) => setTimeout(() => {
           cb()
         }, 1000)
@@ -101,8 +105,8 @@ describe('pubsub', function () {
       }
 
       series([
-        (cb) => goD.api.pubsub.subscribe(topic, checkMessage, cb),
-        (cb) => goD.api.pubsub.publish(topic, data, cb),
+        (cb) => goD.pubsub.subscribe(topic, checkMessage, cb),
+        (cb) => goD.pubsub.publish(topic, data, cb),
         (cb) => waitFor(() => n === 1, cb)
       ], done)
     })
@@ -121,8 +125,8 @@ describe('pubsub', function () {
       }
 
       series([
-        (cb) => jsD.api.pubsub.subscribe(topic, checkMessage, cb),
-        (cb) => jsD.api.pubsub.publish(topic, data, cb),
+        (cb) => jsD.pubsub.subscribe(topic, checkMessage, cb),
+        (cb) => jsD.pubsub.publish(topic, data, cb),
         (cb) => waitFor(() => n === 1, cb)
       ], done)
     })
@@ -141,9 +145,9 @@ describe('pubsub', function () {
       }
 
       series([
-        (cb) => goD.api.pubsub.subscribe(topic, checkMessage, cb),
+        (cb) => goD.pubsub.subscribe(topic, checkMessage, cb),
         (cb) => setTimeout(() => { cb() }, 500),
-        (cb) => jsD.api.pubsub.publish(topic, data, cb),
+        (cb) => jsD.pubsub.publish(topic, data, cb),
         (cb) => waitFor(() => n === 1, cb)
       ], done)
     })
@@ -162,9 +166,9 @@ describe('pubsub', function () {
       }
 
       series([
-        (cb) => jsD.api.pubsub.subscribe(topic, checkMessage, cb),
+        (cb) => jsD.pubsub.subscribe(topic, checkMessage, cb),
         (cb) => setTimeout(() => { cb() }, 500),
-        (cb) => goD.api.pubsub.publish(topic, data, cb),
+        (cb) => goD.pubsub.publish(topic, data, cb),
         (cb) => waitFor(() => n === 1, cb)
       ], done)
     })
@@ -187,8 +191,8 @@ describe('pubsub', function () {
       }
 
       series([
-        (cb) => goD.api.pubsub.subscribe(topic, checkMessage, cb),
-        (cb) => goD.api.pubsub.publish(topic, data, cb),
+        (cb) => goD.pubsub.subscribe(topic, checkMessage, cb),
+        (cb) => goD.pubsub.publish(topic, data, cb),
         (cb) => waitFor(() => n === 1, cb)
       ], done)
     })
@@ -207,8 +211,8 @@ describe('pubsub', function () {
       }
 
       series([
-        (cb) => jsD.api.pubsub.subscribe(topic, checkMessage, cb),
-        (cb) => jsD.api.pubsub.publish(topic, data, cb),
+        (cb) => jsD.pubsub.subscribe(topic, checkMessage, cb),
+        (cb) => jsD.pubsub.publish(topic, data, cb),
         (cb) => waitFor(() => n === 1, cb)
       ], done)
     })
@@ -227,9 +231,9 @@ describe('pubsub', function () {
       }
 
       series([
-        (cb) => goD.api.pubsub.subscribe(topic, checkMessage, cb),
+        (cb) => goD.pubsub.subscribe(topic, checkMessage, cb),
         (cb) => setTimeout(() => { cb() }, 500),
-        (cb) => jsD.api.pubsub.publish(topic, data, cb),
+        (cb) => jsD.pubsub.publish(topic, data, cb),
         (cb) => waitFor(() => n === 1, cb)
       ], done)
     })
@@ -248,9 +252,9 @@ describe('pubsub', function () {
       }
 
       series([
-        (cb) => jsD.api.pubsub.subscribe(topic, checkMessage, cb),
+        (cb) => jsD.pubsub.subscribe(topic, checkMessage, cb),
         (cb) => setTimeout(() => { cb() }, 500),
-        (cb) => goD.api.pubsub.publish(topic, data, cb),
+        (cb) => goD.pubsub.publish(topic, data, cb),
         (cb) => waitFor(() => n === 1, cb)
       ], done)
     })
@@ -273,9 +277,9 @@ describe('pubsub', function () {
       }
 
       series([
-        (cb) => goD.api.pubsub.subscribe(topic, checkMessage, cb),
+        (cb) => goD.pubsub.subscribe(topic, checkMessage, cb),
         (cb) => setTimeout(() => { cb() }, 500),
-        (cb) => goD.api.pubsub.publish(topic, data, cb),
+        (cb) => goD.pubsub.publish(topic, data, cb),
         (cb) => waitFor(() => n === 1, cb)
       ], done)
     })
@@ -294,9 +298,9 @@ describe('pubsub', function () {
       }
 
       series([
-        (cb) => jsD.api.pubsub.subscribe(topic, checkMessage, cb),
+        (cb) => jsD.pubsub.subscribe(topic, checkMessage, cb),
         (cb) => setTimeout(() => { cb() }, 500),
-        (cb) => goD.api.pubsub.publish(topic, data, cb),
+        (cb) => goD.pubsub.publish(topic, data, cb),
         (cb) => waitFor(() => n === 1, cb)
       ], done)
     })
@@ -315,9 +319,9 @@ describe('pubsub', function () {
       }
 
       series([
-        (cb) => goD.api.pubsub.subscribe(topic, checkMessage, cb),
+        (cb) => goD.pubsub.subscribe(topic, checkMessage, cb),
         (cb) => setTimeout(() => { cb() }, 500),
-        (cb) => jsD.api.pubsub.publish(topic, data, cb),
+        (cb) => jsD.pubsub.publish(topic, data, cb),
         (cb) => waitFor(() => n === 1, cb)
       ], done)
     })
@@ -336,9 +340,9 @@ describe('pubsub', function () {
       }
 
       series([
-        (cb) => jsD.api.pubsub.subscribe(topic, checkMessage, cb),
+        (cb) => jsD.pubsub.subscribe(topic, checkMessage, cb),
         (cb) => setTimeout(() => { cb() }, 500),
-        (cb) => jsD.api.pubsub.publish(topic, data, cb),
+        (cb) => jsD.pubsub.publish(topic, data, cb),
         (cb) => waitFor(() => n === 1, cb)
       ], done)
     })

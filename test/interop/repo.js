@@ -11,75 +11,88 @@ const os = require('os')
 const path = require('path')
 const hat = require('hat')
 
-const GoDaemon = require('../utils/interop-daemon-spawner/go')
-const JsDaemon = require('../utils/interop-daemon-spawner/js')
+const ipfsdFactory = require('ipfsd-ctl')
 
-function catAndCheck (daemon, hash, data, callback) {
-  daemon.api.cat(hash, (err, fileData) => {
+const isNode = require('detect-node')
+
+let ipfsdController
+if (isNode) {
+  ipfsdController = ipfsdFactory.localController
+} else {
+  ipfsdController = ipfsdFactory.remoteController()
+}
+
+function catAndCheck (api, hash, data, callback) {
+  api.cat(hash, (err, fileData) => {
     expect(err).to.not.exist()
     expect(fileData).to.eql(data)
     callback()
   })
 }
 
-describe('repo', () => {
+describe.only('repo', () => {
   it('read repo: go -> js', (done) => {
     const dir = path.join(os.tmpdir(), hat())
     const data = crypto.randomBytes(1024 * 5)
 
-    const goDaemon = new GoDaemon({
-      init: true,
-      disposable: false,
-      path: dir
-    })
+    let goDaemon
     let jsDaemon
 
     let hash
     waterfall([
-      (cb) => goDaemon.start(cb),
-      (cb) => goDaemon.api.add(data, cb),
+      (cb) => ipfsdController.spawn({
+        init: true,
+        disposable: false,
+        repoPath: dir
+      }, cb),
+      (node, cb) => {
+        goDaemon = node
+        goDaemon.ctl.add(data, cb)
+      },
       (res, cb) => {
         hash = res[0].hash
-        catAndCheck(goDaemon, hash, data, cb)
+        catAndCheck(goDaemon.ctl, hash, data, cb)
       },
-      (cb) => goDaemon.stop(cb),
-      (cb) => {
-        jsDaemon = new JsDaemon({
-          init: false,
-          disposable: false,
-          path: dir
-        })
-        jsDaemon.start(cb)
+      (cb) => goDaemon.ctrl.stopDaemon(cb),
+      (cb) => ipfsdController.spawn({
+        isJs: true,
+        init: false,
+        disposable: false,
+        repoPath: dir
+      }, cb),
+      (node, cb) => {
+        jsDaemon = node
+        cb()
       },
-      (cb) => catAndCheck(goDaemon, hash, data, cb),
-      (cb) => jsDaemon.stop(cb)
+      (cb) => catAndCheck(goDaemon.ctl, hash, data, cb),
+      (cb) => jsDaemon.stopDaemon(cb)
     ], done)
   })
 
   // This was last due to an update on go-ipfs that changed how datastore is
   // configured
-  it.skip('read repo: js -> go', (done) => {
-    const dir = path.join(os.tmpdir(), hat())
-    const data = crypto.randomBytes(1024 * 5)
-
-    const jsDaemon = new JsDaemon({init: true, disposable: false, path: dir})
-    let goDaemon
-
-    let hash
-    waterfall([
-      (cb) => jsDaemon.start(cb),
-      (cb) => jsDaemon.api.add(data, cb),
-      (res, cb) => {
-        hash = res[0].hash
-        catAndCheck(jsDaemon, hash, data, cb)
-      },
-      (cb) => jsDaemon.stop(cb),
-      (cb) => {
-        goDaemon = new GoDaemon({init: false, disposable: false, path: dir})
-        goDaemon.start(cb)
-      },
-      (cb) => catAndCheck(goDaemon, hash, data, cb),
-      (cb) => goDaemon.stop(cb)
-    ], done)
-  })
+  // it.skip('read repo: js -> go', (done) => {
+  //   const dir = path.join(os.tmpdir(), hat())
+  //   const data = crypto.randomBytes(1024 * 5)
+  //
+  //   const jsDaemon = new JsDaemon({ init: true, disposable: false, path: dir })
+  //   let goDaemon
+  //
+  //   let hash
+  //   waterfall([
+  //     (cb) => jsDaemon.start(cb),
+  //     (cb) => jsDaemon.api.add(data, cb),
+  //     (res, cb) => {
+  //       hash = res[0].hash
+  //       catAndCheck(jsDaemon, hash, data, cb)
+  //     },
+  //     (cb) => jsDaemon.stop(cb),
+  //     (cb) => {
+  //       goDaemon = new GoDaemon({ init: false, disposable: false, path: dir })
+  //       goDaemon.start(cb)
+  //     },
+  //     (cb) => catAndCheck(goDaemon, hash, data, cb),
+  //     (cb) => goDaemon.stop(cb)
+  //   ], done)
+  // })
 })

@@ -17,8 +17,16 @@ const rimraf = require('rimraf')
 const rmDir = promisify(rimraf)
 
 const tmpDir = require('../utils/interop-daemon-spawner/util').tmpDir
-const GoDaemon = require('../utils/interop-daemon-spawner/go')
-const JsDaemon = require('../utils/interop-daemon-spawner/js')
+const ipfsdFactory = require('ipfsd-ctl')
+
+const isNode = require('detect-node')
+
+let ipfsdController
+if (isNode) {
+  ipfsdController = ipfsdFactory.localController
+} else {
+  ipfsdController = ipfsdFactory.remoteController()
+}
 
 const sizes = [
   1024,
@@ -45,46 +53,48 @@ describe('exchange files', () => {
   let jsDaemon
   let js2Daemon
 
+  let nodes
+
   before(function (done) {
-    this.timeout(15 * 1000)
-    goDaemon = new GoDaemon()
-    jsDaemon = new JsDaemon({port: 1})
-    js2Daemon = new JsDaemon({port: 2})
+    this.timeout(100 * 1000)
 
     parallel([
-      (cb) => goDaemon.start(cb),
-      (cb) => jsDaemon.start(cb),
-      (cb) => js2Daemon.start(cb)
-    ], done)
+      (cb) => ipfsdController.spawn(cb),
+      (cb) => ipfsdController.spawn({ isJs: true }, cb),
+      (cb) => ipfsdController.spawn({ isJs: true }, cb)
+    ], (err, n) => {
+      expect(err).to.not.exist()
+      nodes = n
+      goDaemon = nodes[0].ctl
+      jsDaemon = nodes[1].ctl
+      js2Daemon = nodes[2].ctl
+      done()
+    })
   })
 
-  after((done) => {
-    series([
-      (cb) => goDaemon.stop(cb),
-      (cb) => jsDaemon.stop(cb),
-      (cb) => js2Daemon.stop(cb)
-    ], done)
-  })
+  after((done) => parallel(nodes.map((node) => (cb) => node.ctrl.stopDaemon(cb)), done))
 
-  it('connect go <-> js', (done) => {
+  it('connect go <-> js', function (done) {
+    this.timeout(500 * 1000)
+
     let jsId
     let goId
 
     series([
       (cb) => parallel([
-        (cb) => jsDaemon.api.id(cb),
-        (cb) => goDaemon.api.id(cb)
+        (cb) => jsDaemon.id(cb),
+        (cb) => goDaemon.id(cb)
       ], (err, ids) => {
         expect(err).to.not.exist()
         jsId = ids[0]
         goId = ids[1]
         cb()
       }),
-      (cb) => goDaemon.api.swarm.connect(jsId.addresses[0], cb),
-      (cb) => jsDaemon.api.swarm.connect(goId.addresses[0], cb),
+      (cb) => goDaemon.swarm.connect(jsId.addresses[0], cb),
+      (cb) => jsDaemon.swarm.connect(goId.addresses[0], cb),
       (cb) => parallel([
-        (cb) => goDaemon.api.swarm.peers(cb),
-        (cb) => jsDaemon.api.swarm.peers(cb)
+        (cb) => goDaemon.swarm.peers(cb),
+        (cb) => jsDaemon.swarm.peers(cb)
       ], (err, peers) => {
         expect(err).to.not.exist()
         expect(peers[0].map((p) => p.peer.toB58String())).to.include(jsId.id)
@@ -94,25 +104,27 @@ describe('exchange files', () => {
     ], done)
   })
 
-  it('connect js <-> js', (done) => {
+  it('connect js <-> js', function (done) {
+    this.timeout(500 * 1000)
+
     let jsId
     let js2Id
 
     series([
       (cb) => parallel([
-        (cb) => jsDaemon.api.id(cb),
-        (cb) => js2Daemon.api.id(cb)
+        (cb) => jsDaemon.id(cb),
+        (cb) => js2Daemon.id(cb)
       ], (err, ids) => {
         expect(err).to.not.exist()
         jsId = ids[0]
         js2Id = ids[1]
         cb()
       }),
-      (cb) => js2Daemon.api.swarm.connect(jsId.addresses[0], cb),
-      (cb) => jsDaemon.api.swarm.connect(js2Id.addresses[0], cb),
+      (cb) => js2Daemon.swarm.connect(jsId.addresses[0], cb),
+      (cb) => jsDaemon.swarm.connect(js2Id.addresses[0], cb),
       (cb) => parallel([
-        (cb) => js2Daemon.api.swarm.peers(cb),
-        (cb) => jsDaemon.api.swarm.peers(cb)
+        (cb) => js2Daemon.swarm.peers(cb),
+        (cb) => jsDaemon.swarm.peers(cb)
       ], (err, peers) => {
         expect(err).to.not.exist()
         expect(peers[0].map((p) => p.peer.toB58String())).to.include(jsId.id)
@@ -126,8 +138,8 @@ describe('exchange files', () => {
     it(`go -> js: ${pretty(size)}`, (done) => {
       const data = crypto.randomBytes(size)
       waterfall([
-        (cb) => goDaemon.api.add(data, cb),
-        (res, cb) => jsDaemon.api.cat(res[0].hash, cb)
+        (cb) => goDaemon.add(data, cb),
+        (res, cb) => jsDaemon.cat(res[0].hash, cb)
       ], (err, file) => {
         expect(err).to.not.exist()
         expect(file).to.be.eql(data)
@@ -138,8 +150,8 @@ describe('exchange files', () => {
     it(`js -> go: ${pretty(size)}`, (done) => {
       const data = crypto.randomBytes(size)
       waterfall([
-        (cb) => jsDaemon.api.add(data, cb),
-        (res, cb) => goDaemon.api.cat(res[0].hash, cb)
+        (cb) => jsDaemon.add(data, cb),
+        (res, cb) => goDaemon.cat(res[0].hash, cb)
       ], (err, file) => {
         expect(err).to.not.exist()
         expect(file).to.be.eql(data)
@@ -150,8 +162,8 @@ describe('exchange files', () => {
     it(`js -> js: ${pretty(size)}`, (done) => {
       const data = crypto.randomBytes(size)
       waterfall([
-        (cb) => js2Daemon.api.add(data, cb),
-        (res, cb) => jsDaemon.api.cat(res[0].hash, cb)
+        (cb) => js2Daemon.add(data, cb),
+        (res, cb) => jsDaemon.cat(res[0].hash, cb)
       ], (err, file) => {
         expect(err).to.not.exist()
         expect(file).to.be.eql(data)
@@ -169,10 +181,10 @@ describe('exchange files', () => {
         depth: 5,
         number: num
       }).then(() => {
-        return goDaemon.api.util.addFromFs(dir, { recursive: true })
+        return goDaemon.util.addFromFs(dir, { recursive: true })
       }).then((res) => {
         const hash = res[res.length - 1].hash
-        return jsDaemon.api.object.get(hash)
+        return jsDaemon.object.get(hash)
       }).then((res) => {
         expect(res).to.exist()
         return rmDir(dir)
@@ -188,10 +200,10 @@ describe('exchange files', () => {
         depth: 5,
         number: num
       }).then(() => {
-        return jsDaemon.api.util.addFromFs(dir, { recursive: true })
+        return jsDaemon.util.addFromFs(dir, { recursive: true })
       }).then((res) => {
         const hash = res[res.length - 1].hash
-        return goDaemon.api.object.get(hash)
+        return goDaemon.object.get(hash)
       }).then((res) => {
         expect(res).to.exist()
         return rmDir(dir)
@@ -207,10 +219,10 @@ describe('exchange files', () => {
         depth: 5,
         number: num
       }).then(() => {
-        return js2Daemon.api.util.addFromFs(dir, { recursive: true })
+        return js2Daemon.util.addFromFs(dir, { recursive: true })
       }).then((res) => {
         const hash = res[res.length - 1].hash
-        return jsDaemon.api.object.get(hash)
+        return jsDaemon.object.get(hash)
       }).then((res) => {
         expect(res).to.exist()
         return rmDir(dir)
