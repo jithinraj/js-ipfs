@@ -27,13 +27,13 @@ describe('circuit interop', () => {
   let jsTCP
   let jsTCPAddrs
   let jsWS
-  let jsWSAddrs
+  // let jsWSAddrs
   let jsRelayAddrs
 
   let goRelayAddrs
   let goTCPAddrs
   let goTCP
-  let goWSAddrs
+  // let goWSAddrs
   let goWS
 
   let ctrlNodes
@@ -128,7 +128,7 @@ describe('circuit interop', () => {
         },
         (cb) => apiNodes[2].swarm.localAddrs((err, addrs) => {
           expect(err).to.not.exist()
-          jsWSAddrs = addrs.map((a) => a.toString()).filter((a) => !a.includes('/p2p-circuit'))
+          // jsWSAddrs = addrs.map((a) => a.toString()).filter((a) => !a.includes('/p2p-circuit'))
           cb()
         }),
         (cb) => apiNodes[3].id((err, id) => {
@@ -151,7 +151,7 @@ describe('circuit interop', () => {
         },
         (cb) => apiNodes[5].id((err, id) => {
           expect(err).to.not.exist()
-          goWSAddrs = id.addresses
+          // goWSAddrs = id.addresses
           cb()
         })
       ], done)

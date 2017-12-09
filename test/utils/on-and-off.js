@@ -1,7 +1,6 @@
 /* eslint-env mocha */
 'use strict'
 
-const Factory = require('../utils/ipfs-factory-daemon')
 const hat = require('hat')
 const chai = require('chai')
 const dirtyChai = require('dirty-chai')
@@ -11,6 +10,17 @@ chai.use(dirtyChai)
 const ipfsExec = require('../utils/ipfs-exec')
 const clean = require('../utils/clean')
 const os = require('os')
+
+const ipfsdFactory = require('ipfsd-ctl')
+
+const isNode = require('detect-node')
+
+let ipfsdController
+if (isNode) {
+  ipfsdController = ipfsdFactory.localController
+} else {
+  ipfsdController = ipfsdFactory.remoteController()
+}
 
 function off (tests) {
   describe('daemon off (directly to core)', () => {
@@ -38,7 +48,7 @@ function off (tests) {
 
 function on (tests) {
   describe('daemon on (through http-api)', () => {
-    let factory
+    let node
     let thing = {}
 
     before(function (done) {
@@ -47,19 +57,18 @@ function on (tests) {
       // before step
       this.timeout(60 * 1000)
 
-      factory = new Factory()
-
-      factory.spawnNode((err, node) => {
+      ipfsdController.spawn({ isJs: true }, (err, n) => {
         expect(err).to.not.exist()
-        thing.ipfs = ipfsExec(node.repoPath)
-        thing.ipfs.repoPath = node.repoPath
+        node = n
+        thing.ipfs = ipfsExec(node.ctrl.repoPath)
+        thing.ipfs.repoPath = node.ctrl.repoPath
         done()
       })
     })
 
     after(function (done) {
       this.timeout(60 * 1000)
-      factory.dismantle(done)
+      node.ctrl.stopDaemon(done)
     })
 
     tests(thing)

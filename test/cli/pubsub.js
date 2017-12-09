@@ -9,14 +9,24 @@ chai.use(dirtyChai)
 const delay = require('delay')
 const series = require('async/series')
 const InstanceFactory = require('../utils/ipfs-factory-instance')
-const DaemonFactory = require('../utils/ipfs-factory-daemon')
 const ipfsExec = require('../utils/ipfs-exec')
+
+const ipfsdFactory = require('ipfsd-ctl')
+
+const isNode = require('detect-node')
+
+let ipfsdController
+if (isNode) {
+  ipfsdController = ipfsdFactory.localController
+} else {
+  ipfsdController = ipfsdFactory.remoteController()
+}
 
 describe('pubsub', function () {
   this.timeout(40 * 1000)
 
   let instanceFactory
-  let daemonFactory
+  let ipfsd
   let node
   let cli
   let httpApi
@@ -39,18 +49,22 @@ describe('pubsub', function () {
   after((done) => instanceFactory.dismantle(done))
 
   before((done) => {
-    daemonFactory = new DaemonFactory()
-    daemonFactory.spawnNode((err, _node) => {
+    ipfsdController.spawn({
+      isJs: true,
+      args: ['--enable-pubsub-experiment']
+    }, (err, _node) => {
       expect(err).to.not.exist()
-      httpApi = _node
+      ipfsd = _node
+      httpApi = _node.ctl
+      console.dir(_node.ctrl.repoPath)
       done()
     })
   })
 
-  after((done) => daemonFactory.dismantle(done))
+  after((done) => ipfsd.ctrl.stopDaemon(done))
 
   before((done) => {
-    cli = ipfsExec(httpApi.repoPath)
+    cli = ipfsExec(ipfsd.ctrl.repoPath)
     done()
   })
 

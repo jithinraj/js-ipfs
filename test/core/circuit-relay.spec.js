@@ -27,7 +27,7 @@ function peerInfoFromObj (obj, callback) {
   ], callback)
 }
 
-describe.skip('circuit', function () {
+describe('circuit', function () {
   this.timeout(40 * 1000)
 
   let factory
@@ -124,7 +124,7 @@ describe.skip('circuit', function () {
     })
   })
 
-  it.skip('node1 <-> jsRelay <-> node2', (done) => {
+  it('node1 <-> jsRelay <-> node2', (done) => {
     const data = crypto.randomBytes(128)
 
     series([
