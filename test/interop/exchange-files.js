@@ -13,10 +13,15 @@ const pretty = require('pretty-bytes')
 const randomFs = require('random-fs')
 const promisify = require('promisify-es6')
 const rimraf = require('rimraf')
+const join = require('path').join
+const os = require('os')
 
 const rmDir = promisify(rimraf)
 
-const tmpDir = require('../utils/interop-daemon-spawner/util').tmpDir
+function tmpDir () {
+  return join(os.tmpdir(), `ipfs_${String(Math.random()).substr(2)}`)
+}
+
 const ipfsdFactory = require('ipfsd-ctl')
 
 const isNode = require('detect-node')
