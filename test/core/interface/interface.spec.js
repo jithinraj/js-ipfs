@@ -11,6 +11,7 @@ describe('interface-ipfs-core tests', () => {
   require('./generic')
   require('./object')
   require('./dag')
+  require('./key')
   if (isNode) {
     require('./swarm')
     require('./pubsub')
