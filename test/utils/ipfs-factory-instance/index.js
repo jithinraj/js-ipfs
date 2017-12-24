@@ -40,6 +40,7 @@ function Factory () {
     const repo = createTempRepo(repoPath)
     const node = new IPFS({
       repo: repo,
+      pass: hat(),
       init: { bits: 1024 },
       config: config,
       EXPERIMENTAL: {
