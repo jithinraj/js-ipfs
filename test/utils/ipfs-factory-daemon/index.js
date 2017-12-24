@@ -48,7 +48,10 @@ class Factory {
         })
       },
       (cb) => {
-        daemon = new HttpApi(repoPath, config, {enablePubsubExperiment: true})
+        daemon = new HttpApi(repoPath, config, {
+          pass: hat(),
+          enablePubsubExperiment: true
+        })
         daemon.repoPath = repoPath
         this.daemonsSpawned.push(daemon)
 
