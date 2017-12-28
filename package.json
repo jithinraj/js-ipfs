@@ -70,7 +70,7 @@
     "expose-loader": "^0.7.4",
     "form-data": "^2.3.1",
     "hat": "0.0.3",
-    "interface-ipfs-core": "~0.36.16",
+    "interface-ipfs-core": "~0.37.0",
     "ipfsd-ctl": "~0.26.0",
     "left-pad": "^1.2.0",
     "lodash": "^4.17.4",
@@ -102,7 +102,7 @@
     "hapi": "^16.2.2",
     "hapi-set-header": "^1.0.2",
     "hoek": "^5.0.2",
-    "ipfs-api": "^17.2.5",
+    "ipfs-api": "^17.2.6",
     "ipfs-bitswap": "~0.18.0",
     "ipfs-block": "~0.6.1",
     "ipfs-block-service": "~0.13.0",
@@ -162,7 +162,7 @@
     "through2": "^2.0.3",
     "update-notifier": "^2.3.0",
     "yargs": "^10.0.3",
-    "yargs-parser": "^8.0.0"
+    "yargs-parser": "^8.1.0"
   },
   "optionalDependencies": {
     "prom-client": "^10.2.2",
